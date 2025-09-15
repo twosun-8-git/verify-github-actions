@@ -1,5 +1,0 @@
-# Configuration file for PR reviewers
-# This is NOT a GitHub Actions workflow file
-
-reviewers:
-  - TsukasaChinen
