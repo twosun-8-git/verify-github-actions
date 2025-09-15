@@ -104,6 +104,7 @@ jobs:
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: context.issue.number,
+                    body: body + `\n\nIssue #${issueNumber}`
                   });
                   console.log('✅ Issue linked successfully');
                 }
