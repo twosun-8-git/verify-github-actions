@@ -3,6 +3,12 @@ on:
   pull_request:
     types: [opened]
 
+# 権限設定を追加
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   setup:
     runs-on: ubuntu-latest
