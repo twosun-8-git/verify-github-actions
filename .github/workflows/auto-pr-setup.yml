@@ -37,7 +37,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
-                reviewers: ['tanakashin', 'yamashita', 'kawasaki']
+                reviewers: ['TsukasaChinen']
               });
 
               // 2. Set assignee to PR author
