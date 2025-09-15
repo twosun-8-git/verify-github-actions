@@ -61,15 +61,37 @@ jobs:
                 console.log('❌ Failed to set assignee:', error.message);
               }
 
-              // 3. Set labels (通常はエラーにならない)
+              // 3. Set labels (存在確認付き)
               try {
-                await github.rest.issues.addLabels({
+                // 既存のラベル一覧を取得
+                const { data: existingLabels } = await github.rest.issues.listLabelsForRepo({
                   owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  labels: labels
+                  repo: context.repo.repo
                 });
-                console.log('✅ Labels set successfully');
+
+                const existingLabelNames = existingLabels.map(label => label.name);
+
+                // 存在するラベルのみをフィルタリング
+                const validLabels = labels.filter(label => {
+                  const exists = existingLabelNames.includes(label);
+                  if (!exists) {
+                    console.log(`⚠️ Label not found (skipped): ${label}`);
+                  }
+                  return exists;
+                });
+
+                // 存在するラベルのみを設定
+                if (validLabels.length > 0) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    labels: validLabels
+                  });
+                  console.log(`✅ Labels set successfully: ${validLabels.join(', ')}`);
+                } else {
+                  console.log('⚠️ No valid labels found');
+                }
               } catch (error) {
                 console.log('❌ Failed to set labels:', error.message);
               }
@@ -104,7 +126,7 @@ jobs:
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: context.issue.number,
-                    body: body + `\n\nIssue #${issueNumber}`
+                    body: body + `\n\nCloses #${issueNumber}`
                   });
                   console.log('✅ Issue linked successfully');
                 }
