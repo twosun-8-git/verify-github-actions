@@ -23,15 +23,25 @@ jobs:
             const reviewersConfig = JSON.parse(fs.readFileSync('.github/config/reviewers.json', 'utf8'));
 
             const title = context.payload.pull_request.title;
-            const regex = /\[web-front\]\[(\d+)\]\[([^\]]+)\]\[([^\]]+)\]/;
+            const regex = /\[web-front\]\[([^\]]+)\]\[([^\]]+)\]\[([^\]]+)\]/;
             const match = title.match(regex);
 
             if (match) {
-              const issueNumber = match[1];
+              const issueNumbersString = match[1];
               const labelsString = match[2];
               const milestone = match[3];
+
+              // Issue番号を配列に変換（カンマ区切りで複数対応）
+              const issueNumbers = issueNumbersString.split(',').map(num => num.trim());
               const labels = labelsString.split(',').map(label => label.trim());
               const reviewers = reviewersConfig.reviewers || [];
+
+              console.log(`📋 Parsed data:`, {
+                issueNumbers,
+                labels,
+                milestone,
+                reviewers
+              });
 
               // 1. Set reviewers
               if (reviewers.length > 0) {
@@ -118,19 +128,40 @@ jobs:
                 console.log('❌ Failed to set milestone:', error.message);
               }
 
-              // 5. Link to issue
+              // 5. Link to issues (複数対応)
               try {
                 const body = context.payload.pull_request.body || '';
-                if (!body.includes(`#${issueNumber}`)) {
+
+                // 既にリンクされているIssue番号を確認
+                const existingIssueLinks = [];
+                issueNumbers.forEach(issueNum => {
+                  if (body.includes(`#${issueNum}`)) {
+                    existingIssueLinks.push(issueNum);
+                  }
+                });
+
+                // まだリンクされていないIssue番号のみを追加
+                const newIssueNumbers = issueNumbers.filter(issueNum =>
+                  !existingIssueLinks.includes(issueNum)
+                );
+
+                if (newIssueNumbers.length > 0) {
+                  const issueLinks = newIssueNumbers.map(issueNum => `#${issueNum}`).join(', ');
+                  const newBody = body + `\n\nIssues ${issueLinks}`;
+
                   await github.rest.pulls.update({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: context.issue.number,
-                    body: body + `\n\nIssues #${issueNumber}`
+                    body: newBody
                   });
-                  console.log('✅ Issue linked successfully');
+                  console.log(`✅ Issues linked successfully: ${issueLinks}`);
+                } else {
+                  console.log('ℹ️ All issues are already linked');
                 }
               } catch (error) {
-                console.log('❌ Failed to link issue:', error.message);
+                console.log('❌ Failed to link issues:', error.message);
               }
+            } else {
+              console.log('⚠️ PR title does not match expected format');
             }
