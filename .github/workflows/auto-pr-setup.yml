@@ -3,7 +3,6 @@ on:
   pull_request:
     types: [opened]
 
-# 権限設定
 permissions:
   contents: read
   pull-requests: write
@@ -13,14 +12,20 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
       - name: Parse PR title and auto setup
         uses: actions/github-script@v6
         with:
           script: |
+            const fs = require('fs');
+            const yaml = require('js-yaml');
+
+            // reviewers.ymlを読み込み
+            const reviewersConfig = yaml.load(fs.readFileSync('.github/config/reviewers.yml', 'utf8'));
+
             const title = context.payload.pull_request.title;
-
-            /* PRタイトルから取得: [web-front][issue番号][ラベル（複数）][マイルストーン] - 作業内容 */
-
             const regex = /\[web-front\]\[(\d+)\]\[([^\]]+)\]\[([^\]]+)\]/;
             const match = title.match(regex);
 
@@ -28,17 +33,20 @@ jobs:
               const issueNumber = match[1];
               const labelsString = match[2];
               const milestone = match[3];
-
-              // カンマ区切りでラベルを分割し、前後の空白を除去
               const labels = labelsString.split(',').map(label => label.trim());
 
-              // 1. Set reviewers (固定3人)
-              await github.rest.pulls.requestReviewers({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.issue.number,
-                reviewers: ['TsukasaChinen']
-              });
+              // レビュワーを取得
+              const reviewers = reviewersConfig.reviewers || [];
+
+              // 1. Set reviewers
+              if (reviewers.length > 0) {
+                await github.rest.pulls.requestReviewers({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                  reviewers: reviewers
+                });
+              }
 
               // 2. Set assignee to PR author
               await github.rest.issues.addAssignees({
@@ -48,7 +56,7 @@ jobs:
                 assignees: [context.payload.pull_request.user.login]
               });
 
-              // 3. Set labels (複数対応)
+              // 3. Set labels
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -56,7 +64,7 @@ jobs:
                 labels: labels
               });
 
-              // 4. Set milestone (PRタイトルから取得)
+              // 4. Set milestone
               const milestones = await github.rest.issues.listMilestones({
                 owner: context.repo.owner,
                 repo: context.repo.repo
@@ -71,7 +79,7 @@ jobs:
                 });
               }
 
-              // 5. Link to issue (Development)
+              // 5. Link to issue
               const body = context.payload.pull_request.body || '';
               if (!body.includes(`#${issueNumber}`)) {
                 await github.rest.pulls.update({
