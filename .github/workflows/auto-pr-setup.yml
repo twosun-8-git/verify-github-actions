@@ -1,0 +1,71 @@
+name: Auto PR Setup
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse PR title and auto setup
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const regex = /\[web-front\]\[(\d+)\]\[([^\]]+)\]/;
+            const match = title.match(regex);
+
+            if (match) {
+              const issueNumber = match[1];
+              const epicName = match[2];
+
+              // 1. Set reviewers (固定3人)
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                reviewers: ['TsukasaChinen']
+              });
+
+              // 2. Set assignee to PR author
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                assignees: [context.payload.pull_request.user.login]
+              });
+
+              // 3. Set label
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                labels: [epicName]
+              });
+
+              // 4. Set milestone
+              const milestones = await github.rest.issues.listMilestones({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              const milestone = milestones.data.find(m => m.title === `FE${epicName}`);
+              if (milestone) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  milestone: milestone.number
+                });
+              }
+
+              // 5. Link to issue (Development)
+              const body = context.payload.pull_request.body || '';
+              if (!body.includes(`#${issueNumber}`)) {
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                  body: body + `\n\nCloses #${issueNumber}`
+                });
+              }
+            }
