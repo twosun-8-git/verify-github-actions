@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened]
 
-# 権限設定を追加
+# 権限設定
 permissions:
   contents: read
   pull-requests: write
@@ -18,19 +18,26 @@ jobs:
         with:
           script: |
             const title = context.payload.pull_request.title;
-            const regex = /\[web-front\]\[(\d+)\]\[([^\]]+)\]/;
+
+            /* PRタイトルから取得: [web-front][issue番号][ラベル（複数）][マイルストーン] - 作業内容 */
+
+            const regex = /\[web-front\]\[(\d+)\]\[([^\]]+)\]\[([^\]]+)\]/;
             const match = title.match(regex);
 
             if (match) {
               const issueNumber = match[1];
-              const epicName = match[2];
+              const labelsString = match[2];
+              const milestone = match[3];
+
+              // カンマ区切りでラベルを分割し、前後の空白を除去
+              const labels = labelsString.split(',').map(label => label.trim());
 
               // 1. Set reviewers (固定3人)
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
-                reviewers: ['TsukasaChinen']
+                reviewers: ['tanakashin', 'yamashita', 'kawasaki']
               });
 
               // 2. Set assignee to PR author
@@ -41,26 +48,26 @@ jobs:
                 assignees: [context.payload.pull_request.user.login]
               });
 
-              // 3. Set label
+              // 3. Set labels (複数対応)
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                labels: [epicName]
+                labels: labels
               });
 
-              // 4. Set milestone
+              // 4. Set milestone (PRタイトルから取得)
               const milestones = await github.rest.issues.listMilestones({
                 owner: context.repo.owner,
                 repo: context.repo.repo
               });
-              const milestone = milestones.data.find(m => m.title === `FE${epicName}`);
-              if (milestone) {
+              const milestoneObj = milestones.data.find(m => m.title === milestone);
+              if (milestoneObj) {
                 await github.rest.issues.update({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  milestone: milestone.number
+                  milestone: milestoneObj.number
                 });
               }
 
