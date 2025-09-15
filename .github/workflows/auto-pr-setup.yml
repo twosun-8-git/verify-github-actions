@@ -27,9 +27,12 @@ jobs:
             const match = title.match(regex);
 
             if (match) {
-              const issueNumber = match[1];
+              const issueNumbersString = match[1];
               const labelsString = match[2];
               const milestone = match[3];
+
+              // 複数対応: Issue番号、ラベル
+              const issueNumbers = issueNumbersString.split(',').map(num => num.trim());
               const labels = labelsString.split(',').map(label => label.trim());
               const reviewers = reviewersConfig.reviewers || [];
 
@@ -118,19 +121,29 @@ jobs:
                 console.log('❌ Failed to set milestone:', error.message);
               }
 
-              // 5. Link to issue
+              // 5. Link to issues (複数Issue対応)
               try {
                 const body = context.payload.pull_request.body || '';
-                if (!body.includes(`#${issueNumber}`)) {
+                let updatedBody = body;
+
+                // 各Issue番号をチェックして追加
+                issueNumbers.forEach(issueNumber => {
+                  if (!updatedBody.includes(`#${issueNumber}`)) {
+                    updatedBody += `\nCloses #${issueNumber}`;
+                  }
+                });
+
+                // 本文が変更された場合のみ更新
+                if (updatedBody !== body) {
                   await github.rest.pulls.update({
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: context.issue.number,
-                    body: body + `\n\nCloses #${issueNumber}`
+                    body: updatedBody
                   });
-                  console.log('✅ Issue linked successfully');
+                  console.log(`✅ Issues linked successfully: ${issueNumbers.join(', ')}`);
                 }
               } catch (error) {
-                console.log('❌ Failed to link issue:', error.message);
+                console.log('❌ Failed to link issues:', error.message);
               }
             }
