@@ -20,8 +20,6 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
-            // reviewers.jsonを読み込み
             const reviewersConfig = JSON.parse(fs.readFileSync('.github/config/reviewers.json', 'utf8'));
 
             const title = context.payload.pull_request.title;
@@ -33,59 +31,83 @@ jobs:
               const labelsString = match[2];
               const milestone = match[3];
               const labels = labelsString.split(',').map(label => label.trim());
-
-              // レビュワーを取得
               const reviewers = reviewersConfig.reviewers || [];
 
-              // 1. Set reviewers
+              // 1. Set reviewers (エラーハンドリング付き)
               if (reviewers.length > 0) {
-                await github.rest.pulls.requestReviewers({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.issue.number,
-                  reviewers: reviewers
-                });
+                try {
+                  await github.rest.pulls.requestReviewers({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    reviewers: reviewers
+                  });
+                  console.log('✅ Reviewers set successfully');
+                } catch (error) {
+                  console.log('❌ Failed to set reviewers:', error.message);
+                }
               }
 
-              // 2. Set assignee to PR author
-              await github.rest.issues.addAssignees({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                assignees: [context.payload.pull_request.user.login]
-              });
-
-              // 3. Set labels
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                labels: labels
-              });
-
-              // 4. Set milestone
-              const milestones = await github.rest.issues.listMilestones({
-                owner: context.repo.owner,
-                repo: context.repo.repo
-              });
-              const milestoneObj = milestones.data.find(m => m.title === milestone);
-              if (milestoneObj) {
-                await github.rest.issues.update({
+              // 2. Set assignee (エラーハンドリング付き)
+              try {
+                await github.rest.issues.addAssignees({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  milestone: milestoneObj.number
+                  assignees: [context.payload.pull_request.user.login]
                 });
+                console.log('✅ Assignee set successfully');
+              } catch (error) {
+                console.log('❌ Failed to set assignee:', error.message);
+              }
+
+              // 3. Set labels (通常はエラーにならない)
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  labels: labels
+                });
+                console.log('✅ Labels set successfully');
+              } catch (error) {
+                console.log('❌ Failed to set labels:', error.message);
+              }
+
+              // 4. Set milestone
+              try {
+                const milestones = await github.rest.issues.listMilestones({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo
+                });
+                const milestoneObj = milestones.data.find(m => m.title === milestone);
+                if (milestoneObj) {
+                  await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    milestone: milestoneObj.number
+                  });
+                  console.log('✅ Milestone set successfully');
+                } else {
+                  console.log('⚠️ Milestone not found:', milestone);
+                }
+              } catch (error) {
+                console.log('❌ Failed to set milestone:', error.message);
               }
 
               // 5. Link to issue
-              const body = context.payload.pull_request.body || '';
-              if (!body.includes(`#${issueNumber}`)) {
-                await github.rest.pulls.update({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: context.issue.number,
-                  body: body + `\n\nCloses #${issueNumber}`
-                });
+              try {
+                const body = context.payload.pull_request.body || '';
+                if (!body.includes(`#${issueNumber}`)) {
+                  await github.rest.pulls.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                  });
+                  console.log('✅ Issue linked successfully');
+                }
+              } catch (error) {
+                console.log('❌ Failed to link issue:', error.message);
               }
             }
